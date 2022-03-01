@@ -45,4 +45,18 @@ async function* fromObservable<T>(source: Observable<T>) {
   }
 }
 
-export { fromObservable };
+const fromGenerator = async <T, U>(
+  generator: AsyncGenerator<U, T, unknown>
+) => {
+  let val: T | null = null;
+  let running = true;
+  while (running) {
+    const { value, done } = await generator.next();
+    if (done) {
+      val = value as T;
+    }
+  }
+  return val;
+};
+
+export { fromObservable, fromGenerator };

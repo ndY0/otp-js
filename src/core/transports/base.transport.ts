@@ -1,5 +1,4 @@
 import {
-  delayWhen,
   filter,
   from,
   map,
@@ -7,15 +6,12 @@ import {
   mergeMap,
   mergeScan,
   Observable,
-  share,
   shareReplay,
-  startWith,
   Subject,
   take,
   tap,
   timeout as timeoutOperator,
   TimeoutInfo,
-  withLatestFrom,
 } from "rxjs";
 import { ServiceAction } from "../constants/service-actions";
 import { IMessage } from "../interfaces/messaging/message.interface";
@@ -24,8 +20,9 @@ import { IServiceMessage } from "../interfaces/messaging/service-message.interfa
 import { IServiceMessageReply } from "../interfaces/messaging/service-message-reply.interface";
 import { fromObservable } from "../../utils/effects";
 import { MessageAction } from "../constants/message-actions";
+import { ITransport } from "../interfaces/transport-interface";
 
-export abstract class BaseTransport {
+export abstract class BaseTransport implements ITransport {
   private readonly nextMessageSubject = new Subject<{ sid: string }>();
   private readonly nextServiceMessageSubject = new Subject<{ sid: string }>();
   constructor(
@@ -191,7 +188,7 @@ export abstract class BaseTransport {
     this.replyMessageSubject.next(data);
   }
   async *takeMessageReply(sid: string, timeout: number = 10_000) {
-    return yield* fromObservable(
+    const res: IReply = yield fromObservable(
       this.replyMessagePipeline.pipe(
         filter((reply: IReply) => reply.sid === sid),
         take(1),
@@ -204,6 +201,7 @@ export abstract class BaseTransport {
         })
       )
     );
+    return res;
   }
 
   async *putServiceMessageReply(data: IServiceMessageReply) {
@@ -214,7 +212,7 @@ export abstract class BaseTransport {
     op: ServiceAction,
     timeout: number = 10_000
   ) {
-    return yield* fromObservable(
+    const res: IServiceMessageReply = yield fromObservable(
       this.serviceReplyMessagePipeline.pipe(
         filter((reply: IServiceMessageReply) => reply.sid === sid),
         take(1),
@@ -232,5 +230,6 @@ export abstract class BaseTransport {
         })
       )
     );
+    return res;
   }
 }
