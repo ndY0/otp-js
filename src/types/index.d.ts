@@ -1,8 +1,8 @@
 interface IAnyObject {
-  [key: string | number]: AnyObject;
+  [key: string | number]: AnyObject | string | number;
 }
 
-type AnyObject = Record<string | number, IAnyObject>;
+type AnyObject = Record<string | number, IAnyObject | string | number>;
 
 type Without<T, U> = { [P in Exclude<keyof T, keyof U>]?: never };
 type XOR<T, U> = T | U extends object
