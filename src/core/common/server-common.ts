@@ -24,8 +24,8 @@ export abstract class CommonServer<T = any> {
       unknown
     >;
   };
-  public abstract service: {
-    [key in ServiceAction]: (
+  protected abstract service: {
+    [key in ServiceAction]?: (
       serviceMessage: IServiceMessage
     ) => AsyncGenerator<
       unknown,
@@ -68,14 +68,27 @@ export abstract class CommonServer<T = any> {
     while (true) {
       yield* CommonServer.transport.nextServiceMessage(this.id);
       const serviceMessage: IServiceMessage = yield serviceMessageRunner;
-      const response = yield* this.service[serviceMessage.op](serviceMessage);
-      if (response.action === HandlerAction.REPLY && serviceMessage.self) {
-        yield* CommonServer.transport.putServiceMessageReply({
-          data: response.reply,
-          status: true,
-          op: serviceMessage.op,
-          sid: serviceMessage.self,
-        });
+      const serviceHandler = this.service[serviceMessage.op];
+      if(serviceHandler) {
+        const response = yield* serviceHandler(serviceMessage);
+        if (response.action === HandlerAction.REPLY && serviceMessage.self) {
+          yield* CommonServer.transport.putServiceMessageReply({
+            data: response.reply,
+            status: true,
+            op: serviceMessage.op,
+            sid: serviceMessage.self,
+          });
+        }
+      
+      } else {
+        if (serviceMessage.self) {
+          yield* CommonServer.transport.putServiceMessageReply({
+            data: {error: `service command ${serviceMessage.op} not supported`},
+            status: true,
+            op: serviceMessage.op,
+            sid: serviceMessage.self,
+          });
+        }
       }
     }
   }
@@ -84,6 +97,11 @@ export abstract class CommonServer<T = any> {
       ...args: any[]
     ) => AsyncGenerator<unknown, U | void, unknown>;
   };
+  public static clientService: {
+    [key in ServiceAction]?: (
+      ...args: any[]
+    ) => AsyncGenerator<unknown, IServiceMessageReply | void, unknown>;
+  };
   protected static async *callService<T extends typeof CommonServer>(
     self: string,
     sid: string,
@@ -91,11 +109,11 @@ export abstract class CommonServer<T = any> {
     op: ServiceAction,
     timeout: number = 10_000
   ) {
-    yield* target.transport.putServiceMessage({
+    yield* target.transport.putServiceMessage({action: MessageAction.ADD, data: {
       op,
       sid,
       self,
-    });
+    }});
     return yield* target.transport.takeServiceMessageReply(sid, op, timeout);
   }
   protected static async *castService<T extends typeof CommonServer>(
@@ -103,9 +121,10 @@ export abstract class CommonServer<T = any> {
     target: T,
     op: ServiceAction
   ) {
-    yield* target.transport.putServiceMessage({
+    yield* target.transport.putServiceMessage({action: MessageAction.ADD, data: {
       op,
       sid,
-    });
+    }});
   }
+  
 }

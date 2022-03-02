@@ -1,4 +1,4 @@
-import { Observable } from "rxjs";
+import { Observable, Subscription } from "rxjs";
 import { Deferred } from "../core/interfaces/utils/deffered.interface";
 
 function defer<Value>(): Deferred<Value> {
@@ -38,10 +38,12 @@ async function* fromObservable<T>(source: Observable<T>) {
   });
   try {
     while (running) {
-      yield await deferred;
+      yield await Promise.all<T, Subscription>([deferred, new Promise((resolve) => resolve(subscription))]);
     }
   } finally {
-    subscription.unsubscribe();
+    if(!subscription.closed) {
+      subscription.unsubscribe();
+    }
   }
 }
 

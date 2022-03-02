@@ -1,4 +1,4 @@
 export enum ServiceAction {
-    STOP,
-    KILL,
+    STOP = "STOP",
+    KILL = "KILL",
 }

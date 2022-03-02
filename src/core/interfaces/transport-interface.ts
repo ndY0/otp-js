@@ -1,3 +1,4 @@
+import { MessageAction } from "../constants/message-actions";
 import { ServiceAction } from "../constants/service-actions";
 import { IMessage } from "./messaging/message.interface";
 import { IReply } from "./messaging/reply.interface";
@@ -5,11 +6,17 @@ import { IServiceMessageReply } from "./messaging/service-message-reply.interfac
 import { IServiceMessage } from "./messaging/service-message.interface";
 
 export interface ITransport {
-  putMessage(data: IMessage): AsyncGenerator<never, void, unknown>;
+  putMessage(data: {
+    action: MessageAction.ADD;
+    data: IMessage;
+  } | { action: MessageAction.STOP, data: {sid: string} }): AsyncGenerator<never, void, unknown>;
   takeEveryMessage(sid: string): AsyncGenerator<IMessage, void, unknown>;
   nextMessage(sid: string): AsyncGenerator<never, void, unknown>;
   putServiceMessage(
-    data: IServiceMessage
+    data: {
+      action: MessageAction.ADD;
+      data: IServiceMessage;
+    } | { action: MessageAction.STOP, data: {sid: string} }
   ): AsyncGenerator<never, void, unknown>;
   takeEveryServiceMessage(
     sid: string

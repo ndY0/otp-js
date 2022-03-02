@@ -8,6 +8,7 @@ import {
   Observable,
   shareReplay,
   Subject,
+  Subscription,
   take,
   tap,
   timeout as timeoutOperator,
@@ -30,21 +31,21 @@ export abstract class BaseTransport implements ITransport {
     private readonly messageSubject: Subject<{
       action: MessageAction.ADD;
       data: IMessage;
-    }>,
+    } | { action: MessageAction.STOP, data: {sid: string} }>,
     private readonly messagePipeline: Observable<{
       action: MessageAction.ADD;
       data: IMessage;
-    }>,
+    } | { action: MessageAction.STOP, data: {sid: string} }>,
     private readonly replyMessageSubject: Subject<IReply>,
     private readonly replyMessagePipeline: Observable<IReply>,
     private readonly serviceMessageSubject: Subject<{
       action: MessageAction.ADD;
       data: IServiceMessage;
-    }>,
+    } | { action: MessageAction.STOP, data: {sid: string} }>,
     private readonly serviceMessagePipeline: Observable<{
       action: MessageAction.ADD;
       data: IServiceMessage;
-    }>,
+    } | { action: MessageAction.STOP, data: {sid: string} }>,
     private readonly serviceReplyMessageSubject: Subject<IServiceMessageReply>,
     private readonly serviceReplyMessagePipeline: Observable<IServiceMessageReply>
   ) {}
@@ -53,10 +54,14 @@ export abstract class BaseTransport implements ITransport {
    *
    * server api
    */
-  async *putMessage(data: IMessage) {
-    this.messageSubject.next({ action: MessageAction.ADD, data });
+  async *putMessage(data: {
+    action: MessageAction.ADD;
+    data: IMessage;
+  } | { action: MessageAction.STOP, data: {sid: string} }) {
+    this.messageSubject.next(data);
   }
   async *takeEveryMessage(sid: string) {
+    let subscription: Subscription;
     const command = new Subject<{ action: MessageAction.REMOVE_LAST }>();
     const pipeline = merge(this.messagePipeline, command).pipe(
       filter(
@@ -64,6 +69,7 @@ export abstract class BaseTransport implements ITransport {
           action:
             | { action: MessageAction.ADD; data: IMessage }
             | { action: MessageAction.REMOVE_LAST }
+            | { action: MessageAction.STOP, data: {sid: string} }
         ) =>
           action.action === MessageAction.REMOVE_LAST || action.data.sid === sid
       ),
@@ -73,6 +79,7 @@ export abstract class BaseTransport implements ITransport {
           action:
             | { action: MessageAction.ADD; data: IMessage }
             | { action: MessageAction.REMOVE_LAST }
+            | { action: MessageAction.STOP, data: {sid: string} }
         ) => {
           if (action.action === MessageAction.ADD) {
             if (acc.length >= this.maxQueueSize) {
@@ -86,6 +93,8 @@ export abstract class BaseTransport implements ITransport {
             } else {
               acc.push(action.data);
             }
+          } else if (action.action === MessageAction.STOP) {
+            subscription.unsubscribe()
           } else {
             acc.shift();
           }
@@ -93,7 +102,7 @@ export abstract class BaseTransport implements ITransport {
         },
         [] as IMessage[]
       ),
-      shareReplay(1)
+      shareReplay({bufferSize: 1, refCount: true})
     );
     const combined = this.nextMessageSubject.pipe(
       filter((next: { sid: string }) => next.sid === sid),
@@ -108,7 +117,7 @@ export abstract class BaseTransport implements ITransport {
       tap(() => command.next({ action: MessageAction.REMOVE_LAST }))
     );
 
-    for await (let message of fromObservable(combined)) {
+    for await (let [message, subscription] of fromObservable(combined)) {
       yield message;
     }
   }
@@ -116,10 +125,14 @@ export abstract class BaseTransport implements ITransport {
     this.nextMessageSubject.next({ sid });
   }
 
-  async *putServiceMessage(data: IServiceMessage) {
-    this.serviceMessageSubject.next({ action: MessageAction.ADD, data });
+  async *putServiceMessage(data: {
+    action: MessageAction.ADD;
+    data: IServiceMessage;
+  } | { action: MessageAction.STOP, data: {sid: string} }) {
+    this.serviceMessageSubject.next(data);
   }
   async *takeEveryServiceMessage(sid: string) {
+    let subscription: Subscription;
     const command = new Subject<{ action: MessageAction.REMOVE_LAST }>();
     const pipeline = merge(this.serviceMessagePipeline, command).pipe(
       filter(
@@ -127,6 +140,7 @@ export abstract class BaseTransport implements ITransport {
           action:
             | { action: MessageAction.ADD; data: IServiceMessage }
             | { action: MessageAction.REMOVE_LAST }
+            | { action: MessageAction.STOP, data: {sid: string} }
         ) =>
           action.action === MessageAction.REMOVE_LAST || action.data.sid === sid
       ),
@@ -136,6 +150,7 @@ export abstract class BaseTransport implements ITransport {
           action:
             | { action: MessageAction.ADD; data: IServiceMessage }
             | { action: MessageAction.REMOVE_LAST }
+            | { action: MessageAction.STOP, data: {sid: string} }
         ) => {
           if (action.action === MessageAction.ADD) {
             if (acc.length >= this.maxQueueSize) {
@@ -150,6 +165,8 @@ export abstract class BaseTransport implements ITransport {
             } else {
               acc.push(action.data);
             }
+          } else if (action.action === MessageAction.STOP) {
+            subscription.unsubscribe()
           } else {
             acc.shift();
           }
@@ -159,6 +176,7 @@ export abstract class BaseTransport implements ITransport {
       ),
       shareReplay(1)
     );
+    const testSubject = new Subject()
     const combined = this.nextMessageSubject.pipe(
       filter((next: { sid: string }) => next.sid === sid),
       mergeMap(() =>
@@ -172,7 +190,7 @@ export abstract class BaseTransport implements ITransport {
       tap(() => command.next({ action: MessageAction.REMOVE_LAST }))
     );
 
-    for await (let message of fromObservable(combined)) {
+    for await (let [message, subscription] of fromObservable(combined)) {
       yield message;
     }
   }

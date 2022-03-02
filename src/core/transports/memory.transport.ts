@@ -11,14 +11,14 @@ export class MemoryTransport extends BaseTransport {
     const messageSubject = new Subject<{
       action: MessageAction.ADD;
       data: IMessage;
-    }>();
+    } | { action: MessageAction.STOP, data: {sid: string} }>();
     const messagePipeline = messageSubject.pipe(share());
     const replyMessageSubject = new Subject<IReply>();
     const replyMessagePipeline = replyMessageSubject.pipe(share());
     const serviceMessageSubject = new Subject<{
       action: MessageAction.ADD;
       data: IServiceMessage;
-    }>();
+    } | { action: MessageAction.STOP, data: {sid: string} }>();
     const serviceMessagePipeline = serviceMessageSubject.pipe(share());
     const serviceReplyMessageSubject = new Subject<IServiceMessageReply>();
     const serviceReplyMessagePipeline = serviceReplyMessageSubject.pipe(
