@@ -38,10 +38,13 @@ async function* fromObservable<T>(source: Observable<T>) {
   });
   try {
     while (running) {
-      yield await Promise.all<T, Subscription>([deferred, new Promise((resolve) => resolve(subscription))]);
+      yield await Promise.all<T | Subscription>([
+        deferred,
+        new Promise((resolve) => resolve(subscription)),
+      ]);
     }
   } finally {
-    if(!subscription.closed) {
+    if (!subscription.closed) {
       subscription.unsubscribe();
     }
   }
