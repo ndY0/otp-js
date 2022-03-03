@@ -1,6 +1,8 @@
 import { v1 } from "uuid";
 import { XOR } from "../../types";
 import { fromGenerator } from "../../utils/effects";
+import { ChildResolve } from "../constants/child-resolve";
+import { ChildRestart } from "../constants/child-restart";
 import { HandlerAction } from "../constants/handler-actions";
 import { MessageAction } from "../constants/message-actions";
 import { ProcessTermination } from "../constants/process-termination";
@@ -8,6 +10,7 @@ import { ServiceAction } from "../constants/service-actions";
 import { IMessage } from "../interfaces/messaging/message.interface";
 import { IServiceMessageReply } from "../interfaces/messaging/service-message-reply.interface";
 import { IServiceMessage } from "../interfaces/messaging/service-message.interface";
+import { ChildSpec } from "../interfaces/servers/child-spec";
 import { ITransport } from "../interfaces/transport-interface";
 import { Link } from "../link/link";
 
@@ -39,14 +42,13 @@ export abstract class CommonServer {
       unknown
     >;
   };
-  public abstract startLink(
-    ...args: any
-  ): AsyncGenerator<unknown, any, unknown>;
-  public async *start<T extends typeof CommonServer>(
+  public abstract start(...args: any): AsyncGenerator<unknown, any, unknown>;
+  public abstract childSpec: ChildSpec;
+  public async *startLink<T extends typeof CommonServer>(
     target: T,
     ...args: any[]
   ) {
-    const state = yield* this.startLink(...args);
+    const state = yield* this.start(...args);
     try {
       await Promise.race([
         fromGenerator(this.runMessages(state)).then(() => {

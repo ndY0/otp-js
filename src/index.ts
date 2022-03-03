@@ -2,7 +2,7 @@ import { GenServer } from "./core/server/genserver";
 import { NO_REPLY, REPLY } from "./core/constants/handler-actions";
 
 class TestServer extends GenServer {
-  public async *startLink() {
+  public async *start() {
     return { test: "test" };
   }
 
@@ -31,4 +31,4 @@ class TestServer extends GenServer {
   };
 }
 
-const test = new TestServer().start(TestServer);
+const test = new TestServer().startLink(TestServer);
