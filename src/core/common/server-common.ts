@@ -15,7 +15,7 @@ import { ITransport } from "../interfaces/transport-interface";
 import { Link } from "../link/link";
 
 export abstract class CommonServer {
-  protected id = v1();
+  public id = v1();
   private innerLink = new Link();
   protected static transport: ITransport;
   public abstract server: {
@@ -43,7 +43,7 @@ export abstract class CommonServer {
     >;
   };
   public abstract start(...args: any): AsyncGenerator<unknown, any, unknown>;
-  public abstract childSpec: ChildSpec;
+  public static childSpec: ChildSpec;
   public async *startLink<T extends typeof CommonServer>(
     target: T,
     ...args: any[]
@@ -173,7 +173,7 @@ export abstract class CommonServer {
       },
     });
   }
-  async *link() {
-    return yield* this.innerLink.link();
+  link() {
+    return this.innerLink.link();
   }
 }

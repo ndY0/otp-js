@@ -30,5 +30,3 @@ class TestServer extends GenServer {
     },
   };
 }
-
-const test = new TestServer().startLink(TestServer);

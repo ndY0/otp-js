@@ -1,4 +1,4 @@
-import { Observable, Subject } from "rxjs";
+import { Observable, Subject, tap } from "rxjs";
 import { fromObservable } from "../../utils/effects";
 import { ProcessTermination } from "../constants/process-termination";
 
@@ -23,12 +23,9 @@ export class Link {
   /**
    * supervisor api
    */
-  async *link() {
-    const termination: {
-      termination: ProcessTermination;
-      term?: any;
-    } = yield fromObservable(this.supervisedObservable);
-    this.supervisedSubject.complete();
-    return termination;
+  link() {
+    return this.supervisedObservable.pipe(
+      tap(() => this.supervisedSubject.complete())
+    );
   }
 }

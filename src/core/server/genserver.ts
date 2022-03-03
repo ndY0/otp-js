@@ -9,7 +9,7 @@ import { IServiceMessageReply } from "../interfaces/messaging/service-message-re
 import { IServiceMessage } from "../interfaces/messaging/service-message.interface";
 
 export abstract class GenServer extends CommonServer {
-  childSpec = {
+  public static childSpec = {
     resolve: ChildResolve.MODULE,
     restart: ChildRestart.PERMANENT,
   };
