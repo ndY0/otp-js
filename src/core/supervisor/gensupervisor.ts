@@ -1,32 +1,150 @@
-import { Without } from "../../types";
+import { Observable } from "rxjs";
 import { fromGenerator } from "../../utils/effects";
 import {
   superviseOneForAll,
   superviseOneForOne,
 } from "../../utils/supervision";
-import { Transport } from "../annotations/transport";
 import { CommonServer } from "../common/server-common";
 import { ChildResolve } from "../constants/child-resolve";
 import { ChildRestart } from "../constants/child-restart";
-import { HandlerAction, NO_REPLY, REPLY } from "../constants/handler-actions";
+import { NO_REPLY, REPLY } from "../constants/handler-actions";
 import { MessageAction } from "../constants/message-actions";
 import { ProcessTermination } from "../constants/process-termination";
 import { RestartStrategy } from "../constants/restart-strategy";
 import { ServiceAction } from "../constants/service-actions";
 import { IServiceMessage } from "../interfaces/messaging/service-message.interface";
-import { GenServer } from "../server/genserver";
-import { MemoryTransport } from "../transports/memory.transport";
+import { ChildSpec } from "../interfaces/servers/child-spec";
 
 export abstract class GenSupervisor extends CommonServer {
+  public id: string;
+  constructor() {
+    super();
+    console.log(this.constructor.name);
+    this.id = this.constructor.name;
+  }
   public static childSpec = {
     resolve: ChildResolve.MODULE,
     restart: ChildRestart.PERMANENT,
   };
-  public server = {};
-  static client = {};
+  public server = {
+    async *getChildren(
+      _: any,
+      state: Map<
+        string,
+        {
+          target: typeof CommonServer & (new (...args: any[]) => CommonServer);
+          worker: CommonServer;
+          initArgs: any[];
+          ref: string;
+          spec: ChildSpec;
+          workerLinkPipeline: Observable<{
+            termination: ProcessTermination;
+            term?: any;
+          }>;
+        }
+      >
+    ) {
+      return {
+        state,
+        action: REPLY,
+        reply: Array.from(state).map(([, { ref }]) => ref),
+      };
+    },
+    async *stopChild(
+      { sid }: { sid: string },
+      state: Map<
+        string,
+        {
+          target: typeof CommonServer & (new (...args: any[]) => CommonServer);
+          worker: CommonServer;
+          initArgs: any[];
+          ref: string;
+          spec: ChildSpec;
+          workerLinkPipeline: Observable<{
+            termination: ProcessTermination;
+            term?: any;
+          }>;
+        }
+      >
+    ) {
+      const worker = state.get(sid);
+      if (worker) {
+        worker.target.castService(sid, worker.target, ServiceAction.KILL);
+      }
+      return {
+        state,
+        action: NO_REPLY,
+      };
+    },
+    async *countChildren(
+      { sid }: { sid: string },
+      state: Map<
+        string,
+        {
+          target: typeof CommonServer & (new (...args: any[]) => CommonServer);
+          worker: CommonServer;
+          initArgs: any[];
+          ref: string;
+          spec: ChildSpec;
+          workerLinkPipeline: Observable<{
+            termination: ProcessTermination;
+            term?: any;
+          }>;
+        }
+      >
+    ) {
+      return {
+        state,
+        action: REPLY,
+        reply: { count: state.size },
+      };
+    },
+  };
+  static client = {
+    async *getChildren(self: string, sid: string, target: typeof CommonServer) {
+      return yield* GenSupervisor.call(self, sid, target, "getChildren", {});
+    },
+    async *countChildren(
+      self: string,
+      sid: string,
+      target: typeof CommonServer
+    ) {
+      return yield* GenSupervisor.call(self, sid, target, "countChildren", {});
+    },
+    async *stopChild(
+      sid: string,
+      target: typeof CommonServer,
+      data: { sid: string }
+    ) {
+      return yield* GenSupervisor.cast(sid, target, "stopChild", data);
+    },
+  };
   protected service = {
-    async *[ServiceAction.STOP](serviceMessage: IServiceMessage) {
-      // récupérer ici tout les enfants (implémenter la méthode coté client) puis les stopper via le clientService
+    async *[ServiceAction.STOP](
+      serviceMessage: IServiceMessage,
+      state: Map<
+        string,
+        {
+          target: typeof CommonServer & (new (...args: any[]) => CommonServer);
+          worker: CommonServer;
+          initArgs: any[];
+          ref: string;
+          spec: ChildSpec;
+          workerLinkPipeline: Observable<{
+            termination: ProcessTermination;
+            term?: any;
+          }>;
+        }
+      >
+    ) {
+      for (const [ref, { target }] of state) {
+        yield* target.callService(
+          serviceMessage.sid,
+          ref,
+          target,
+          ServiceAction.STOP
+        );
+      }
       yield* GenSupervisor.transport.putServiceMessage({
         action: MessageAction.STOP,
         data: { sid: serviceMessage.sid },
@@ -36,8 +154,26 @@ export abstract class GenSupervisor extends CommonServer {
         reply: { status: true },
       };
     },
-    async *[ServiceAction.KILL](serviceMessage: IServiceMessage) {
-      // idem
+    async *[ServiceAction.KILL](
+      serviceMessage: IServiceMessage,
+      state: Map<
+        string,
+        {
+          target: typeof CommonServer & (new (...args: any[]) => CommonServer);
+          worker: CommonServer;
+          initArgs: any[];
+          ref: string;
+          spec: ChildSpec;
+          workerLinkPipeline: Observable<{
+            termination: ProcessTermination;
+            term?: any;
+          }>;
+        }
+      >
+    ) {
+      for (const [ref, { target }] of state) {
+        yield* target.castService(ref, target, ServiceAction.STOP);
+      }
       yield* GenSupervisor.transport.putServiceMessage({
         action: MessageAction.STOP,
         data: { sid: serviceMessage.sid },
@@ -47,10 +183,16 @@ export abstract class GenSupervisor extends CommonServer {
       };
     },
   };
-  protected static children: () => {
+  public static children: () => {
     target: typeof CommonServer & (new (...args: any[]) => CommonServer);
     initArgs: any[];
   }[];
+  public async *startLink<T extends typeof CommonServer>(
+    target: T,
+    strategy: RestartStrategy
+  ) {
+    yield* super.startLink(target, strategy);
+  }
   async *start<T extends typeof GenSupervisor>(
     target: T,
     strategy: RestartStrategy
@@ -85,7 +227,7 @@ export abstract class GenSupervisor extends CommonServer {
     } else {
       superviseOneForAll(workersState);
     }
-    workersState.forEach(({ worker, initArgs }) => {
+    workersState.forEach(({ target, worker, initArgs }) => {
       fromGenerator(worker.startLink(target, ...initArgs));
     });
     return workersState;
@@ -93,44 +235,6 @@ export abstract class GenSupervisor extends CommonServer {
   /**
    * ce a quoi il faut penser :
    * - conditions d'arret du supervisor ?
-   * - propager l'arret du supervisor au workers !
+   * - propager l'arret du supervisor au workers ! => DONE
    */
-}
-
-@Transport(MemoryTransport, 10_000)
-class TestServer extends GenServer {
-  public async *start() {
-    return { test: "test" };
-  }
-
-  public server = {
-    async *test(state: { test: string }) {
-      yield true;
-      return {
-        action: REPLY,
-        state,
-        reply: {},
-      };
-    },
-    async *test2(state: { test: string }) {
-      yield true;
-      return {
-        action: NO_REPLY,
-        state,
-      };
-    },
-  };
-
-  public static client = {
-    async *testClient(self: string, sid: string, data: { foo: "bar" }) {
-      return yield* GenServer.call(self, sid, TestServer, "test", data);
-    },
-  };
-}
-
-@Transport(MemoryTransport, 10_000)
-class TestSupervisor extends GenSupervisor {
-  protected static children() {
-    return [{ target: TestServer, initArgs: [] }];
-  }
 }

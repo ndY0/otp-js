@@ -1,3 +1,4 @@
+import { v1 } from "uuid";
 import { AnyObject } from "../../types";
 import { CommonServer } from "../common/server-common";
 import { ChildResolve } from "../constants/child-resolve";
@@ -8,6 +9,11 @@ import { ServiceAction } from "../constants/service-actions";
 import { IServiceMessage } from "../interfaces/messaging/service-message.interface";
 
 export abstract class GenServer extends CommonServer {
+  public id: string;
+  constructor() {
+    super();
+    this.id = v1();
+  }
   public static childSpec = {
     resolve: ChildResolve.MODULE,
     restart: ChildRestart.PERMANENT,
@@ -33,39 +39,4 @@ export abstract class GenServer extends CommonServer {
       };
     },
   };
-
-  protected static async *call<T extends typeof GenServer>(
-    self: string,
-    sid: string,
-    target: T,
-    op: Exclude<keyof InstanceType<T>["server"], symbol>,
-    data: AnyObject,
-    timeout: number = 10_000
-  ) {
-    yield* target.transport.putMessage({
-      action: MessageAction.ADD,
-      data: {
-        data,
-        op,
-        sid,
-        self,
-      },
-    });
-    return yield* target.transport.takeMessageReply(sid, timeout);
-  }
-  protected static async *cast<T extends typeof GenServer>(
-    sid: string,
-    target: T,
-    op: Exclude<keyof InstanceType<T>["server"], symbol>,
-    data: AnyObject
-  ) {
-    yield* target.transport.putMessage({
-      action: MessageAction.ADD,
-      data: {
-        data,
-        op,
-        sid,
-      },
-    });
-  }
 }

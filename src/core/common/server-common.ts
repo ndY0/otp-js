@@ -1,9 +1,6 @@
 import { Subscription } from "rxjs";
-import { v1 } from "uuid";
-import { XOR } from "../../types";
+import { AnyObject, XOR } from "../../types";
 import { fromGenerator } from "../../utils/effects";
-import { ChildResolve } from "../constants/child-resolve";
-import { ChildRestart } from "../constants/child-restart";
 import { HandlerAction } from "../constants/handler-actions";
 import { MessageAction } from "../constants/message-actions";
 import { ProcessTermination } from "../constants/process-termination";
@@ -16,11 +13,12 @@ import { ITransport } from "../interfaces/transport-interface";
 import { Link } from "../link/link";
 
 export abstract class CommonServer {
-  public id = v1();
+  public abstract id: string;
   private innerLink = new Link();
   protected static transport: ITransport;
   public abstract server: {
     [key: string]: (
+      data: any,
       state: any
     ) => AsyncGenerator<
       unknown,
@@ -33,7 +31,8 @@ export abstract class CommonServer {
   };
   protected abstract service: {
     [key in ServiceAction]?: (
-      serviceMessage: IServiceMessage
+      serviceMessage: IServiceMessage,
+      state: any
     ) => AsyncGenerator<
       unknown,
       XOR<
@@ -49,7 +48,7 @@ export abstract class CommonServer {
     target: T,
     ...args: any[]
   ) {
-    const state = yield* this.start(...args);
+    const state = yield* this.start(target, ...args);
     try {
       await Promise.race([
         fromGenerator(this.runMessages(state)).then(() => {
@@ -59,7 +58,7 @@ export abstract class CommonServer {
             })
           );
         }),
-        fromGenerator(this.runServiceMessages()).then(() => {
+        fromGenerator(this.runServiceMessages(state)).then(() => {
           fromGenerator(
             this.innerLink.signal({
               termination: ProcessTermination.SHUTDOWN,
@@ -90,7 +89,7 @@ export abstract class CommonServer {
         data = value as IMessage;
       }
       if (data) {
-        const response = yield* this.server[data.op](state);
+        const response = yield* this.server[data.op](data.data, state);
         if (response.action === HandlerAction.REPLY && data.self) {
           yield* CommonServer.transport.putMessageReply({
             data: response.reply,
@@ -102,7 +101,7 @@ export abstract class CommonServer {
       }
     }
   }
-  private async *runServiceMessages() {
+  private async *runServiceMessages(state: any) {
     const serviceMessageRunner = CommonServer.transport.takeEveryServiceMessage(
       this.id
     );
@@ -118,7 +117,7 @@ export abstract class CommonServer {
       if (data) {
         const serviceHandler = this.service[data.op];
         if (serviceHandler) {
-          const response = yield* serviceHandler(data);
+          const response = yield* serviceHandler(data, state);
           if (response.action === HandlerAction.REPLY && data.self) {
             yield* CommonServer.transport.putServiceMessageReply({
               data: response.reply,
@@ -190,6 +189,40 @@ export abstract class CommonServer {
     yield* target.transport.putServiceMessage({
       action: MessageAction.ADD,
       data: {
+        op,
+        sid,
+      },
+    });
+  }
+  protected static async *call<T extends typeof CommonServer>(
+    self: string,
+    sid: string,
+    target: T,
+    op: Exclude<keyof InstanceType<T>["server"], symbol>,
+    data: AnyObject,
+    timeout: number = 10_000
+  ) {
+    yield* target.transport.putMessage({
+      action: MessageAction.ADD,
+      data: {
+        data,
+        op,
+        sid,
+        self,
+      },
+    });
+    return yield* target.transport.takeMessageReply(sid, timeout);
+  }
+  protected static async *cast<T extends typeof CommonServer>(
+    sid: string,
+    target: T,
+    op: Exclude<keyof InstanceType<T>["server"], symbol>,
+    data: AnyObject
+  ) {
+    yield* target.transport.putMessage({
+      action: MessageAction.ADD,
+      data: {
+        data,
         op,
         sid,
       },

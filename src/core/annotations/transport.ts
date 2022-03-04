@@ -10,7 +10,12 @@ const Transport =
     ...args: ConstructorParameters<U>
   ) =>
   (constructor: T) => {
-    Reflect.set(constructor, "transport", new transport(...args), constructor);
+    Reflect.defineProperty(constructor, "transport", {
+      configurable: false,
+      enumerable: false,
+      value: new transport(...args),
+      writable: false,
+    });
   };
 
 export { Transport };
