@@ -1,14 +1,21 @@
 import { Without } from "../../types";
 import { fromGenerator } from "../../utils/effects";
-import { superviseOneForOne } from "../../utils/supervision";
+import {
+  superviseOneForAll,
+  superviseOneForOne,
+} from "../../utils/supervision";
+import { Transport } from "../annotations/transport";
 import { CommonServer } from "../common/server-common";
 import { ChildResolve } from "../constants/child-resolve";
 import { ChildRestart } from "../constants/child-restart";
 import { HandlerAction, NO_REPLY, REPLY } from "../constants/handler-actions";
+import { MessageAction } from "../constants/message-actions";
 import { ProcessTermination } from "../constants/process-termination";
 import { RestartStrategy } from "../constants/restart-strategy";
+import { ServiceAction } from "../constants/service-actions";
 import { IServiceMessage } from "../interfaces/messaging/service-message.interface";
 import { GenServer } from "../server/genserver";
+import { MemoryTransport } from "../transports/memory.transport";
 
 export abstract class GenSupervisor extends CommonServer {
   public static childSpec = {
@@ -17,7 +24,29 @@ export abstract class GenSupervisor extends CommonServer {
   };
   public server = {};
   static client = {};
-  static clientService = {};
+  protected service = {
+    async *[ServiceAction.STOP](serviceMessage: IServiceMessage) {
+      // récupérer ici tout les enfants (implémenter la méthode coté client) puis les stopper via le clientService
+      yield* GenSupervisor.transport.putServiceMessage({
+        action: MessageAction.STOP,
+        data: { sid: serviceMessage.sid },
+      });
+      return {
+        action: REPLY,
+        reply: { status: true },
+      };
+    },
+    async *[ServiceAction.KILL](serviceMessage: IServiceMessage) {
+      // idem
+      yield* GenSupervisor.transport.putServiceMessage({
+        action: MessageAction.STOP,
+        data: { sid: serviceMessage.sid },
+      });
+      return {
+        action: NO_REPLY,
+      };
+    },
+  };
   protected static children: () => {
     target: typeof CommonServer & (new (...args: any[]) => CommonServer);
     initArgs: any[];
@@ -53,15 +82,22 @@ export abstract class GenSupervisor extends CommonServer {
     );
     if (strategy === RestartStrategy.ONE_FOR_ONE) {
       workersState.forEach(superviseOneForOne);
-      return workersState;
-    } else if (strategy === RestartStrategy.ONE_FOR_ALL) {
     } else {
+      superviseOneForAll(workersState);
     }
+    workersState.forEach(({ worker, initArgs }) => {
+      fromGenerator(worker.startLink(target, ...initArgs));
+    });
+    return workersState;
   }
-  //TODO : implement server function to handle inittialisation of watching children,
-  // and client function to alter the state of supervised children
+  /**
+   * ce a quoi il faut penser :
+   * - conditions d'arret du supervisor ?
+   * - propager l'arret du supervisor au workers !
+   */
 }
 
+@Transport(MemoryTransport, 10_000)
 class TestServer extends GenServer {
   public async *start() {
     return { test: "test" };
@@ -92,6 +128,7 @@ class TestServer extends GenServer {
   };
 }
 
+@Transport(MemoryTransport, 10_000)
 class TestSupervisor extends GenSupervisor {
   protected static children() {
     return [{ target: TestServer, initArgs: [] }];

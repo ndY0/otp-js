@@ -1,3 +1,4 @@
+import { Subscription } from "rxjs";
 import { MessageAction } from "../constants/message-actions";
 import { ServiceAction } from "../constants/service-actions";
 import { IMessage } from "./messaging/message.interface";
@@ -6,21 +7,29 @@ import { IServiceMessageReply } from "./messaging/service-message-reply.interfac
 import { IServiceMessage } from "./messaging/service-message.interface";
 
 export interface ITransport {
-  putMessage(data: {
-    action: MessageAction.ADD;
-    data: IMessage;
-  } | { action: MessageAction.STOP, data: {sid: string} }): AsyncGenerator<never, void, unknown>;
-  takeEveryMessage(sid: string): AsyncGenerator<IMessage, void, unknown>;
+  putMessage(
+    data:
+      | {
+          action: MessageAction.ADD;
+          data: IMessage;
+        }
+      | { action: MessageAction.STOP; data: { sid: string } }
+  ): AsyncGenerator<never, void, unknown>;
+  takeEveryMessage(
+    sid: string
+  ): AsyncGenerator<Subscription | IMessage, void, unknown>;
   nextMessage(sid: string): AsyncGenerator<never, void, unknown>;
   putServiceMessage(
-    data: {
-      action: MessageAction.ADD;
-      data: IServiceMessage;
-    } | { action: MessageAction.STOP, data: {sid: string} }
+    data:
+      | {
+          action: MessageAction.ADD;
+          data: IServiceMessage;
+        }
+      | { action: MessageAction.STOP; data: { sid: string } }
   ): AsyncGenerator<never, void, unknown>;
   takeEveryServiceMessage(
     sid: string
-  ): AsyncGenerator<IServiceMessage, void, unknown>;
+  ): AsyncGenerator<Subscription | IServiceMessage, void, unknown>;
   nextServiceMessage(sid: string): AsyncGenerator<never, void, unknown>;
   putMessageReply(data: IReply): AsyncGenerator<never, void, unknown>;
   takeMessageReply(

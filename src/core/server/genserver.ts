@@ -5,7 +5,6 @@ import { ChildRestart } from "../constants/child-restart";
 import { NO_REPLY, REPLY } from "../constants/handler-actions";
 import { MessageAction } from "../constants/message-actions";
 import { ServiceAction } from "../constants/service-actions";
-import { IServiceMessageReply } from "../interfaces/messaging/service-message-reply.interface";
 import { IServiceMessage } from "../interfaces/messaging/service-message.interface";
 
 export abstract class GenServer extends CommonServer {
@@ -32,32 +31,6 @@ export abstract class GenServer extends CommonServer {
       return {
         action: NO_REPLY,
       };
-    },
-  };
-
-  public static clientService = {
-    async *[ServiceAction.STOP](
-      self: string,
-      sid: string,
-      target: typeof GenServer,
-      timeout = 10_000
-    ) {
-      const res: IServiceMessageReply = yield* GenServer.callService(
-        self,
-        sid,
-        target,
-        ServiceAction.STOP,
-        timeout
-      );
-      return res;
-    },
-    async *[ServiceAction.KILL](
-      self: string,
-      sid: string,
-      target: typeof GenServer,
-      timeout = 10_000
-    ) {
-      yield* GenServer.castService(sid, target, ServiceAction.KILL);
     },
   };
 

@@ -1,3 +1,4 @@
+import { Subscription } from "rxjs";
 import { v1 } from "uuid";
 import { XOR } from "../../types";
 import { fromGenerator } from "../../utils/effects";
@@ -80,17 +81,20 @@ export abstract class CommonServer {
     let state = initState;
     while (true) {
       yield* CommonServer.transport.nextMessage(this.id);
-      const { done, value }: IteratorResult<IMessage, void> =
+      const { done, value }: IteratorResult<Subscription | IMessage, void> =
         await messageRunner.next();
+      let data: IMessage;
       if (done) {
         break;
+      } else {
+        data = value as IMessage;
       }
-      if (value) {
-        const response = yield* this.server[value.op](state);
-        if (response.action === HandlerAction.REPLY && value.self) {
+      if (data) {
+        const response = yield* this.server[data.op](state);
+        if (response.action === HandlerAction.REPLY && data.self) {
           yield* CommonServer.transport.putMessageReply({
             data: response.reply,
-            sid: value.self,
+            sid: data.self,
             status: true,
           });
         }
@@ -105,30 +109,33 @@ export abstract class CommonServer {
     while (true) {
       yield* CommonServer.transport.nextServiceMessage(this.id);
       const { done, value } = await serviceMessageRunner.next();
+      let data: IServiceMessage;
       if (done) {
         break;
+      } else {
+        data = value as IServiceMessage;
       }
-      if (value) {
-        const serviceHandler = this.service[value.op];
+      if (data) {
+        const serviceHandler = this.service[data.op];
         if (serviceHandler) {
-          const response = yield* serviceHandler(value);
-          if (response.action === HandlerAction.REPLY && value.self) {
+          const response = yield* serviceHandler(data);
+          if (response.action === HandlerAction.REPLY && data.self) {
             yield* CommonServer.transport.putServiceMessageReply({
               data: response.reply,
               status: true,
-              op: value.op,
-              sid: value.self,
+              op: data.op,
+              sid: data.self,
             });
           }
         } else {
-          if (value.self) {
+          if (data.self) {
             yield* CommonServer.transport.putServiceMessageReply({
               data: {
-                error: `service command ${value.op} not supported`,
+                error: `service command ${data.op} not supported`,
               },
               status: true,
-              op: value.op,
-              sid: value.self,
+              op: data.op,
+              sid: data.self,
             });
           }
         }
@@ -138,10 +145,25 @@ export abstract class CommonServer {
   public static client: {
     [key: string]: (...args: any[]) => AsyncGenerator<unknown, any, unknown>;
   };
-  public static clientService: {
-    [key in ServiceAction]?: (
-      ...args: any[]
-    ) => AsyncGenerator<unknown, IServiceMessageReply | void, unknown>;
+  public static clientService = {
+    async *[ServiceAction.STOP](
+      self: string,
+      sid: string,
+      target: typeof CommonServer,
+      timeout = 10_000
+    ) {
+      const res: IServiceMessageReply = yield* CommonServer.callService(
+        self,
+        sid,
+        target,
+        ServiceAction.STOP,
+        timeout
+      );
+      return res;
+    },
+    async *[ServiceAction.KILL](sid: string, target: typeof CommonServer) {
+      yield* CommonServer.castService(sid, target, ServiceAction.KILL);
+    },
   };
   protected static async *callService<T extends typeof CommonServer>(
     self: string,

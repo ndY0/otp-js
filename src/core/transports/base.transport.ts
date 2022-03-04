@@ -28,24 +28,36 @@ export abstract class BaseTransport implements ITransport {
   private readonly nextServiceMessageSubject = new Subject<{ sid: string }>();
   constructor(
     private readonly maxQueueSize: number,
-    private readonly messageSubject: Subject<{
-      action: MessageAction.ADD;
-      data: IMessage;
-    } | { action: MessageAction.STOP, data: {sid: string} }>,
-    private readonly messagePipeline: Observable<{
-      action: MessageAction.ADD;
-      data: IMessage;
-    } | { action: MessageAction.STOP, data: {sid: string} }>,
+    private readonly messageSubject: Subject<
+      | {
+          action: MessageAction.ADD;
+          data: IMessage;
+        }
+      | { action: MessageAction.STOP; data: { sid: string } }
+    >,
+    private readonly messagePipeline: Observable<
+      | {
+          action: MessageAction.ADD;
+          data: IMessage;
+        }
+      | { action: MessageAction.STOP; data: { sid: string } }
+    >,
     private readonly replyMessageSubject: Subject<IReply>,
     private readonly replyMessagePipeline: Observable<IReply>,
-    private readonly serviceMessageSubject: Subject<{
-      action: MessageAction.ADD;
-      data: IServiceMessage;
-    } | { action: MessageAction.STOP, data: {sid: string} }>,
-    private readonly serviceMessagePipeline: Observable<{
-      action: MessageAction.ADD;
-      data: IServiceMessage;
-    } | { action: MessageAction.STOP, data: {sid: string} }>,
+    private readonly serviceMessageSubject: Subject<
+      | {
+          action: MessageAction.ADD;
+          data: IServiceMessage;
+        }
+      | { action: MessageAction.STOP; data: { sid: string } }
+    >,
+    private readonly serviceMessagePipeline: Observable<
+      | {
+          action: MessageAction.ADD;
+          data: IServiceMessage;
+        }
+      | { action: MessageAction.STOP; data: { sid: string } }
+    >,
     private readonly serviceReplyMessageSubject: Subject<IServiceMessageReply>,
     private readonly serviceReplyMessagePipeline: Observable<IServiceMessageReply>
   ) {}
@@ -54,10 +66,14 @@ export abstract class BaseTransport implements ITransport {
    *
    * server api
    */
-  async *putMessage(data: {
-    action: MessageAction.ADD;
-    data: IMessage;
-  } | { action: MessageAction.STOP, data: {sid: string} }) {
+  async *putMessage(
+    data:
+      | {
+          action: MessageAction.ADD;
+          data: IMessage;
+        }
+      | { action: MessageAction.STOP; data: { sid: string } }
+  ) {
     this.messageSubject.next(data);
   }
   async *takeEveryMessage(sid: string) {
@@ -69,7 +85,7 @@ export abstract class BaseTransport implements ITransport {
           action:
             | { action: MessageAction.ADD; data: IMessage }
             | { action: MessageAction.REMOVE_LAST }
-            | { action: MessageAction.STOP, data: {sid: string} }
+            | { action: MessageAction.STOP; data: { sid: string } }
         ) =>
           action.action === MessageAction.REMOVE_LAST || action.data.sid === sid
       ),
@@ -79,7 +95,7 @@ export abstract class BaseTransport implements ITransport {
           action:
             | { action: MessageAction.ADD; data: IMessage }
             | { action: MessageAction.REMOVE_LAST }
-            | { action: MessageAction.STOP, data: {sid: string} }
+            | { action: MessageAction.STOP; data: { sid: string } }
         ) => {
           if (action.action === MessageAction.ADD) {
             if (acc.length >= this.maxQueueSize) {
@@ -94,7 +110,7 @@ export abstract class BaseTransport implements ITransport {
               acc.push(action.data);
             }
           } else if (action.action === MessageAction.STOP) {
-            subscription.unsubscribe()
+            subscription.unsubscribe();
           } else {
             acc.shift();
           }
@@ -102,7 +118,7 @@ export abstract class BaseTransport implements ITransport {
         },
         [] as IMessage[]
       ),
-      shareReplay({bufferSize: 1, refCount: true})
+      shareReplay({ bufferSize: 1, refCount: true })
     );
     const combined = this.nextMessageSubject.pipe(
       filter((next: { sid: string }) => next.sid === sid),
@@ -125,10 +141,14 @@ export abstract class BaseTransport implements ITransport {
     this.nextMessageSubject.next({ sid });
   }
 
-  async *putServiceMessage(data: {
-    action: MessageAction.ADD;
-    data: IServiceMessage;
-  } | { action: MessageAction.STOP, data: {sid: string} }) {
+  async *putServiceMessage(
+    data:
+      | {
+          action: MessageAction.ADD;
+          data: IServiceMessage;
+        }
+      | { action: MessageAction.STOP; data: { sid: string } }
+  ) {
     this.serviceMessageSubject.next(data);
   }
   async *takeEveryServiceMessage(sid: string) {
@@ -140,7 +160,7 @@ export abstract class BaseTransport implements ITransport {
           action:
             | { action: MessageAction.ADD; data: IServiceMessage }
             | { action: MessageAction.REMOVE_LAST }
-            | { action: MessageAction.STOP, data: {sid: string} }
+            | { action: MessageAction.STOP; data: { sid: string } }
         ) =>
           action.action === MessageAction.REMOVE_LAST || action.data.sid === sid
       ),
@@ -150,7 +170,7 @@ export abstract class BaseTransport implements ITransport {
           action:
             | { action: MessageAction.ADD; data: IServiceMessage }
             | { action: MessageAction.REMOVE_LAST }
-            | { action: MessageAction.STOP, data: {sid: string} }
+            | { action: MessageAction.STOP; data: { sid: string } }
         ) => {
           if (action.action === MessageAction.ADD) {
             if (acc.length >= this.maxQueueSize) {
@@ -166,7 +186,7 @@ export abstract class BaseTransport implements ITransport {
               acc.push(action.data);
             }
           } else if (action.action === MessageAction.STOP) {
-            subscription.unsubscribe()
+            subscription.unsubscribe();
           } else {
             acc.shift();
           }
@@ -176,7 +196,6 @@ export abstract class BaseTransport implements ITransport {
       ),
       shareReplay(1)
     );
-    const testSubject = new Subject()
     const combined = this.nextMessageSubject.pipe(
       filter((next: { sid: string }) => next.sid === sid),
       mergeMap(() =>
