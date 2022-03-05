@@ -43,14 +43,3 @@ class TestSupervisor extends GenSupervisor {
     return [{ target: TestServer, initArgs: [] }];
   }
 }
-console.log(TestSupervisor);
-const test = new TestSupervisor();
-fromGenerator(test.startLink(TestSupervisor, RestartStrategy.ONE_FOR_ONE));
-
-fromGenerator(
-  TestSupervisor.client.countChildren(
-    TestSupervisor.name,
-    TestSupervisor.name,
-    TestSupervisor
-  )
-).then(console.log);

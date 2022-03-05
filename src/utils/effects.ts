@@ -38,9 +38,9 @@ async function* fromObservable<T>(source: Observable<T>) {
   });
   try {
     while (running) {
-      yield await Promise.all<T | Subscription>([
+      yield await Promise.all([
         deferred,
-        new Promise((resolve) => resolve(subscription)),
+        new Promise<Subscription>((resolve) => resolve(subscription)),
       ]);
     }
   } finally {

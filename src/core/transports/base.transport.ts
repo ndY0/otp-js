@@ -129,11 +129,11 @@ export abstract class BaseTransport implements ITransport {
         )
       ),
       map((messages) => messages[0]),
-
       tap(() => command.next({ action: MessageAction.REMOVE_LAST }))
     );
 
-    for await (let [message, subscription] of fromObservable(combined)) {
+    for await (const [message, innerSubscription] of fromObservable(combined)) {
+      subscription = innerSubscription;
       yield message;
     }
   }
@@ -209,7 +209,8 @@ export abstract class BaseTransport implements ITransport {
       tap(() => command.next({ action: MessageAction.REMOVE_LAST }))
     );
 
-    for await (let [message, subscription] of fromObservable(combined)) {
+    for await (const [message, innerSubscription] of fromObservable(combined)) {
+      subscription = innerSubscription;
       yield message;
     }
   }

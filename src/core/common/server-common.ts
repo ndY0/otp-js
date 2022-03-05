@@ -51,14 +51,14 @@ export abstract class CommonServer {
     const state = yield* this.start(target, ...args);
     try {
       await Promise.race([
-        fromGenerator(this.runMessages(state)).then(() => {
+        fromGenerator(this.runMessages(target, state)).then(() => {
           fromGenerator(
             this.innerLink.signal({
               termination: ProcessTermination.NORMAL,
             })
           );
         }),
-        fromGenerator(this.runServiceMessages(state)).then(() => {
+        fromGenerator(this.runServiceMessages(target, state)).then(() => {
           fromGenerator(
             this.innerLink.signal({
               termination: ProcessTermination.SHUTDOWN,
@@ -75,25 +75,25 @@ export abstract class CommonServer {
       });
     }
   }
-  private async *runMessages(initState: any) {
-    const messageRunner = CommonServer.transport.takeEveryMessage(this.id);
+  private async *runMessages<T extends typeof CommonServer>(
+    target: T,
+    initState: any
+  ) {
+    const messageRunner = target.transport.takeEveryMessage(this.id);
     let state = initState;
     while (true) {
-      yield* CommonServer.transport.nextMessage(this.id);
-      const { done, value }: IteratorResult<Subscription | IMessage, void> =
+      yield* target.transport.nextMessage(this.id);
+      const { done, value }: IteratorResult<IMessage, void> =
         await messageRunner.next();
-      let data: IMessage;
       if (done) {
         break;
-      } else {
-        data = value as IMessage;
       }
-      if (data) {
-        const response = yield* this.server[data.op](data.data, state);
-        if (response.action === HandlerAction.REPLY && data.self) {
-          yield* CommonServer.transport.putMessageReply({
+      if (value) {
+        const response = yield* this.server[value.op](value.data, state);
+        if (response.action === HandlerAction.REPLY && value.self) {
+          yield* target.transport.putMessageReply({
             data: response.reply,
-            sid: data.self,
+            sid: value.self,
             status: true,
           });
         }
@@ -101,40 +101,41 @@ export abstract class CommonServer {
       }
     }
   }
-  private async *runServiceMessages(state: any) {
-    const serviceMessageRunner = CommonServer.transport.takeEveryServiceMessage(
+  private async *runServiceMessages<T extends typeof CommonServer>(
+    target: T,
+    state: any
+  ) {
+    const serviceMessageRunner = target.transport.takeEveryServiceMessage(
       this.id
     );
     while (true) {
-      yield* CommonServer.transport.nextServiceMessage(this.id);
+      serviceMessageRunner.next();
+      yield* target.transport.nextServiceMessage(this.id);
       const { done, value } = await serviceMessageRunner.next();
-      let data: IServiceMessage;
       if (done) {
         break;
-      } else {
-        data = value as IServiceMessage;
       }
-      if (data) {
-        const serviceHandler = this.service[data.op];
+      if (value) {
+        const serviceHandler = this.service[value.op];
         if (serviceHandler) {
-          const response = yield* serviceHandler(data, state);
-          if (response.action === HandlerAction.REPLY && data.self) {
-            yield* CommonServer.transport.putServiceMessageReply({
+          const response = yield* serviceHandler(value, state);
+          if (response.action === HandlerAction.REPLY && value.self) {
+            yield* target.transport.putServiceMessageReply({
               data: response.reply,
               status: true,
-              op: data.op,
-              sid: data.self,
+              op: value.op,
+              sid: value.self,
             });
           }
         } else {
-          if (data.self) {
-            yield* CommonServer.transport.putServiceMessageReply({
+          if (value.self) {
+            yield* target.transport.putServiceMessageReply({
               data: {
-                error: `service command ${data.op} not supported`,
+                error: `service command ${value.op} not supported`,
               },
               status: true,
-              op: data.op,
-              sid: data.self,
+              op: value.op,
+              sid: value.self,
             });
           }
         }

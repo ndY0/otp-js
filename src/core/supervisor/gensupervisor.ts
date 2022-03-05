@@ -19,7 +19,6 @@ export abstract class GenSupervisor extends CommonServer {
   public id: string;
   constructor() {
     super();
-    console.log(this.constructor.name);
     this.id = this.constructor.name;
   }
   public static childSpec = {

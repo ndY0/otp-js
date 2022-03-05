@@ -15,9 +15,7 @@ export interface ITransport {
         }
       | { action: MessageAction.STOP; data: { sid: string } }
   ): AsyncGenerator<never, void, unknown>;
-  takeEveryMessage(
-    sid: string
-  ): AsyncGenerator<Subscription | IMessage, void, unknown>;
+  takeEveryMessage(sid: string): AsyncGenerator<IMessage, void, unknown>;
   nextMessage(sid: string): AsyncGenerator<never, void, unknown>;
   putServiceMessage(
     data:
@@ -29,7 +27,7 @@ export interface ITransport {
   ): AsyncGenerator<never, void, unknown>;
   takeEveryServiceMessage(
     sid: string
-  ): AsyncGenerator<Subscription | IServiceMessage, void, unknown>;
+  ): AsyncGenerator<IServiceMessage, void, unknown>;
   nextServiceMessage(sid: string): AsyncGenerator<never, void, unknown>;
   putMessageReply(data: IReply): AsyncGenerator<never, void, unknown>;
   takeMessageReply(
